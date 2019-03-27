@@ -134,7 +134,10 @@ def main(opt):
 
     if opt.valid_src and opt.valid_tgt:
         logger.info("Building & saving validation data...")
-        build_save_dataset('valid', fields, src_reader, tgt_reader, opt)
+        val_dataset_files = \
+            build_save_dataset('valid', fields, src_reader, tgt_reader, opt)
+        # TOM: Create a vocab out of both training and validation tokens
+        train_dataset_files += val_dataset_files
 
     logger.info("Building & saving vocabulary...")
     build_save_vocab(train_dataset_files, fields, opt)
