@@ -10,14 +10,14 @@
 """
 
 from copy import deepcopy
-import itertools
+import itertools, sys
 import torch
 
 import onmt.utils
 from onmt.utils.logging import logger
 
 
-def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
+def build_trainer(opt, device_id, model, fields, optim, model_saver=None, best_saver=None):
     """
     Simplify `Trainer` creation based on user `opt`s*
 
@@ -57,6 +57,7 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
                            grad_accum_count, n_gpu, gpu_rank,
                            gpu_verbose_level, report_manager,
                            model_saver=model_saver if gpu_rank == 0 else None,
+                           best_saver=best_saver,
                            average_decay=average_decay,
                            average_every=average_every,
                            model_dtype=opt.model_dtype)
@@ -91,7 +92,7 @@ class Trainer(object):
     def __init__(self, model, train_loss, valid_loss, optim,
                  trunc_size=0, shard_size=32,
                  norm_method="sents", grad_accum_count=1, n_gpu=1, gpu_rank=1,
-                 gpu_verbose_level=0, report_manager=None, model_saver=None,
+                 gpu_verbose_level=0, report_manager=None, model_saver=None, best_saver=None,
                  average_decay=0, average_every=1, model_dtype='fp32'):
         # Basic attributes.
         self.model = model
@@ -107,6 +108,8 @@ class Trainer(object):
         self.gpu_verbose_level = gpu_verbose_level
         self.report_manager = report_manager
         self.model_saver = model_saver
+        self.best_model_saver = best_saver
+        self.min_val_loss = sys.maxsize
         self.average_decay = average_decay
         self.moving_average = None
         self.average_every = average_every
@@ -174,6 +177,10 @@ class Trainer(object):
         Returns:
             The gathered statistics.
         """
+        print('*' * 80)
+        print('NEW TRAINING WITH VALIDATION SAVER')
+        print('*' * 80)
+
         if valid_iter is None:
             logger.info('Start training loop without validation...')
         else:
@@ -221,7 +228,7 @@ class Trainer(object):
                     logger.info('GpuRank %d: validate step %d'
                                 % (self.gpu_rank, step))
                 valid_stats = self.validate(
-                    valid_iter, moving_average=self.moving_average)
+                    valid_iter, step, moving_average=self.moving_average)
                 if self.gpu_verbose_level > 0:
                     logger.info('GpuRank %d: gather valid stat \
                                 step %d' % (self.gpu_rank, step))
@@ -244,7 +251,7 @@ class Trainer(object):
             self.model_saver.save(step, moving_average=self.moving_average)
         return total_stats
 
-    def validate(self, valid_iter, moving_average=None):
+    def validate(self, valid_iter, step, moving_average=None):
         """ Validate model.
             valid_iter: validate data iterator
         Returns:
@@ -284,6 +291,15 @@ class Trainer(object):
         else:
             # Set model back to training mode.
             valid_model.train()
+
+            # Assess if the model has minimum validation loss and save model if so.
+            if stats.loss < self.min_val_loss:
+                # Save best validation model
+                logger.info('New best validation loss %.5f found, saving new best model' % stats.loss)
+                self.best_model_saver.save(step, moving_average=self.moving_average)
+                self.min_val_loss = stats.loss
+            else:
+                logger.info('No change to best validation model, best loss is %.5f' % self.min_val_loss)
 
         return stats
 

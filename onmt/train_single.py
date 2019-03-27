@@ -93,8 +93,11 @@ def main(opt, device_id):
     # Build model saver
     model_saver = build_model_saver(model_opt, opt, model, fields, optim)
 
+    # Save the best model
+    best_saver = build_model_saver(model_opt, opt, model, fields, optim, best=True)
+
     trainer = build_trainer(
-        opt, device_id, model, fields, optim, model_saver=model_saver)
+        opt, device_id, model, fields, optim, model_saver=model_saver, best_saver=best_saver)
 
     train_iter = build_dataset_iter("train", fields, opt)
     valid_iter = build_dataset_iter(

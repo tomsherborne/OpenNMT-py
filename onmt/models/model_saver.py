@@ -8,13 +8,14 @@ from onmt.utils.logging import logger
 from copy import deepcopy
 
 
-def build_model_saver(model_opt, opt, model, fields, optim):
+def build_model_saver(model_opt, opt, model, fields, optim, best=False):
     model_saver = ModelSaver(opt.save_model,
                              model,
                              model_opt,
                              fields,
                              optim,
-                             opt.keep_checkpoint)
+                             opt.keep_checkpoint,
+                             best)
     return model_saver
 
 
@@ -27,14 +28,15 @@ class ModelSaverBase(object):
     """
 
     def __init__(self, base_path, model, model_opt, fields, optim,
-                 keep_checkpoint=-1):
+                 keep_checkpoint=-1, best=False):
         self.base_path = base_path
         self.model = model
         self.model_opt = model_opt
         self.fields = fields
         self.optim = optim
         self.last_saved_step = None
-        self.keep_checkpoint = keep_checkpoint
+        self.keep_checkpoint = keep_checkpoint if best is False else -1
+        self.best_mode = best
         if keep_checkpoint > 0:
             self.checkpoint_queue = deque([], maxlen=keep_checkpoint)
 
@@ -67,7 +69,7 @@ class ModelSaverBase(object):
                 self._rm_checkpoint(todel)
             self.checkpoint_queue.append(chkpt_name)
 
-    def _save(self, step):
+    def _save(self, step, model):
         """Save a resumable checkpoint.
 
         Args:
@@ -116,8 +118,10 @@ class ModelSaver(ModelSaverBase):
             'optim': self.optim.state_dict(),
         }
 
-        logger.info("Saving checkpoint %s_step_%d.pt" % (self.base_path, step))
-        checkpoint_path = '%s_step_%d.pt' % (self.base_path, step)
+        step_ = "best" if self.best_mode else str(step)
+        checkpoint_path = '%s_step_%s.pt' % (self.base_path, step_)
+        logger.info("Saving checkpoint %s" % checkpoint_path)
+
         torch.save(checkpoint, checkpoint_path)
         return checkpoint, checkpoint_path
 
