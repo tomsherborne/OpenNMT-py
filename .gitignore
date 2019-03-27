@@ -110,3 +110,7 @@ ENV/
 
 # Tensorboard
 runs/
+
+# Lang2Logic Folder for 
+lang2logic/
+glove/
